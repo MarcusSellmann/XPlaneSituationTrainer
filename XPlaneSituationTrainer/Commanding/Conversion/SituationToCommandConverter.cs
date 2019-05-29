@@ -2,7 +2,7 @@
 using XPC.DataRef.v1300.FlightModel;
 using XPlaneSituationTrainer.Lib.Data;
 
-namespace XPlaneSituationTrainer.Lib.Conversion {
+namespace XPlaneSituationTrainer.Lib.Commanding.Conversion {
     public static class SituationToCommandConverter {
         public static List<ICommand> FlightModelPositionToCommands(FlightModelPosition flightModelPosition) {
             if (flightModelPosition == null) {
