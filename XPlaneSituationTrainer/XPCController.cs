@@ -29,3 +29,32 @@ namespace XPlaneSituationTrainer.Lib {
         }
     }
 }
+
+
+
+
+
+class Program {
+    static void Main(string[] args) {
+        //wait for reply messages from server and send them to console 
+        Task.Factory.StartNew(async () => {
+            while (true) {
+                try {
+                    var received = await client.Receive();
+                    Console.WriteLine(received.Message);
+                    if (received.Message.Contains("quit"))
+                        break;
+                } catch (Exception ex) {
+                    Debug.Write(ex);
+                }
+            }
+        });
+
+        //type ahead :-)
+        string read;
+        do {
+            read = Console.ReadLine();
+            client.Send(read);
+        } while (read != "quit");
+    }
+}
