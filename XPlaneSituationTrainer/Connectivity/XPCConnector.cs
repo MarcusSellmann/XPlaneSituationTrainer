@@ -23,7 +23,7 @@ namespace XPlaneSituationTrainer.Lib.Connectivity {
 
         public async Task<XPCUdpMsgReceived> Receive() {
             var result = await Client.ReceiveAsync();
-            return new XPCUdpMsgReceived() {
+            return new XPCUdpMsgReceived {
                 Message = Encoding.ASCII.GetString(result.Buffer, 0, result.Buffer.Length),
                 Sender = result.RemoteEndPoint
             };
