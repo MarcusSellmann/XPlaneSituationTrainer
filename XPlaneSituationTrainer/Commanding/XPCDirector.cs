@@ -1,4 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+
 namespace XPlaneSituationTrainer.Lib.Commanding {
     public class XPCDirector {
         public XPCDirector() {
@@ -320,65 +324,59 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             sendUDP(os.toByteArray());
 }
 
-/**
- * Gets position information for the specified airplane.
- *
- * @param ac The aircraft to get position information for.
- * @return An array containing control surface data in the same format as {@code sendPOSI}.
- * @throws IOException If the command cannot be sent or a response cannot be read.
- */
-public float[] getPOSI(int ac) throws IOException {
+
+/// <summary>
+/// Gets position information for the specified airplane.
+/// </summary>
+/// 
+/// <param name="ac">The aircraft to get position information for.</param>
+/// <returns>An array containing control surface data in the same format as {@code sendPOSI}.</returns>
+/// <exception cref="IOException">If the command cannot be sent or a response cannot be read.</exception>
+public float[] GetPOSI(int ac) {
     // Send request
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("GETP".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(ac);
-            sendUDP(os.toByteArray());
+    XPCDirector.Instance.Send(PackValues("GETP", 0xFF, ac).ToArray());
 
-// Read response
-byte[] data = readUDP();
-            if(data.Length == 0)
-            {
-                throw new IOException("No response received.");
-            }
-            if(data.Length< 34)
-            {
-                throw new IOException("Response too short");
-            }
+    // Read response
+    byte[] data = readUDP();
+    if (data.Length == 0) {
+        throw new IOException("No response received.");
+    }
+    if (data.Length < 34) {
+        throw new IOException("Response too short");
+    }
 
-            // Parse response
-            float[] result = new float[7];
-ByteBuffer bb = ByteBuffer.wrap(data);
-bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(int i = 0; i< 7; ++i)
-            {
-                result[i] = bb.getFloat(6 + 4 * i);
-            }
-            return result;
-        }
+    // Parse response
+    float[] result = new float[7];
+    ByteBuffer bb = ByteBuffer.wrap(data);
+    bb.order(ByteOrder.LITTLE_ENDIAN);
+    for (int i = 0; i < 7; ++i) {
+        result[i] = bb.getFloat(6 + 4 * i);
+    }
+    return result;
+}
 
-        /**
-         * Sets the position of the player ac.
-         *
-         * @param values   <p>An array containing position elements as follows:</p>
-         *                 <ol>
-         *                     <li>Latitude (deg)</li>
-         *                     <li>Longitude (deg)</li>
-         *                     <li>Altitude (m above MSL)</li>
-         *                     <li>Roll (deg)</li>
-         *                     <li>Pitch (deg)</li>
-         *                     <li>True Heading (deg)</li>
-         *                     <li>Gear (0=up, 1=down)</li>
-         *                 </ol>
-         *                 <p>
-         *                     If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To
-         *                     change values in the middle of the array without affecting the preceding values, set the
-         *                     preceding values to -998.
-         *                 </p>
-         * @throws IOException If the command can not be sent.
-         */
-        public void sendPOSI(float[] values) throws IOException {
-    sendPOSI(values, 0);
+/**
+ * Sets the position of the player ac.
+ *
+ * @param values   <p>An array containing position elements as follows:</p>
+ *                 <ol>
+ *                     <li>Latitude (deg)</li>
+ *                     <li>Longitude (deg)</li>
+ *                     <li>Altitude (m above MSL)</li>
+ *                     <li>Roll (deg)</li>
+ *                     <li>Pitch (deg)</li>
+ *                     <li>True Heading (deg)</li>
+ *                     <li>Gear (0=up, 1=down)</li>
+ *                 </ol>
+ *                 <p>
+ *                     If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To
+ *                     change values in the middle of the array without affecting the preceding values, set the
+ *                     preceding values to -998.
+ *                 </p>
+ * @throws IOException If the command can not be sent.
+ */
+public void SendPOSI(float[] values) {
+    SendPOSI(values, 0);
 }
 
 /**
@@ -402,55 +400,45 @@ bb.order(ByteOrder.LITTLE_ENDIAN);
  * @param ac The ac to set. 0 for the player ac.
  * @throws IOException If the command can not be sent.
  */
-public void sendPOSI(float[] values, int ac) throws IOException {
-            //Preconditions
-            if(values == null)
-            {
-        throw new IllegalArgumentException("posi must no be null.");
+public void SendPOSI(float[] values, int ac) {
+    //Preconditions
+    if (values == null) {
+        throw new ArgumentException("posi must no be null.");
     }
-            if(values.Length > 7)
-            {
-        throw new IllegalArgumentException("posi must have 7 or fewer elements.");
+    if (values.Length > 7) {
+        throw new ArgumentException("posi must have 7 or fewer elements.");
     }
-            if(ac < 0 || ac > 255)
-            {
-        throw new IllegalArgumentException("ac must be between 0 and 255.");
+    if (ac < 0 || ac > 255) {
+        throw new ArgumentException("ac must be between 0 and 255.");
     }
 
-            //Pad command values and convert to bytes
-            int i;
+    //Pad command values and convert to bytes
+    int i;
     ByteBuffer bb = ByteBuffer.allocate(28);
     bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(i = 0; i < values.Length; ++i)
-            {
+    for (i = 0; i < values.Length; ++i) {
         bb.putFloat(i * 4, values[i]);
     }
-            for(; i < 7; ++i)
-            {
+    for (; i < 7; ++i) {
         bb.putFloat(i * 4, -998);
     }
 
     //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("POSI".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(ac);
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
-        }
+    os.write(bb.array());
+    XPCDirector.Instance.Send(PackValues("POSI", 0xFF, ac, ).ToArray());
+}
 
-        /**
-         * Reads X-Plane data
-         *
-         * @return The data read.
-         * @throws IOException If the read operation fails.
-         */
-        public float[][] readData() throws IOException {
-            byte[]
-    buffer = readUDP();
+/**
+ * Reads X-Plane data
+ *
+ * @return The data read.
+ * @throws IOException If the read operation fails.
+ */
+public float[][] ReadData() {
+    byte[] buffer = readUDP();
     ByteBuffer bb = ByteBuffer.wrap(buffer);
-            int cur = 5;
-            int len = bb.get(cur++);
+    int cur = 5;
+    int len = bb.get(cur++);
     float[][] result = new float[bb.get(len)][9];
     for (int i = 0; i < len; ++i) {
         for (int j = 0; j < 9; ++j) {
@@ -459,30 +447,28 @@ os.write("POSI".getBytes(StandardCharsets.UTF_8));
         }
     }
     return result;
-    }
+}
 
-        /**
-         * Sends data to X-Plane
-         *
-         * @param data The data to send.
-         * @throws IOException If the command cannot be sent.
-         */
-        public void sendDATA(float[][] data) throws IOException {
-            //Preconditions
-            if(data == null || data.Length == 0)
-            {
-        throw new IllegalArgumentException("data must be a non-null, non-empty array.");
+/**
+ * Sends data to X-Plane
+ *
+ * @param data The data to send.
+ * @throws IOException If the command cannot be sent.
+ */
+public void SendDATA(float[][] data) {
+    //Preconditions
+    if (data == null || data.Length == 0) {
+        throw new ArgumentException("data must be a non-null, non-empty array.");
     }
 
     //Convert data to bytes
     ByteBuffer bb = ByteBuffer.allocate(4 * 9 * data.Length);
     bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(int i = 0; i < data.Length; ++i)
-            {
+    for (int i = 0; i < data.Length; ++i) {
         int rowStart = 9 * 4 * i;
         float[] row = data[i];
         if (row.Length != 9) {
-            throw new IllegalArgumentException("Rows must contain exactly 9 items. (Row " + i + ")");
+            throw new ArgumentException("Rows must contain exactly 9 items. (Row " + i + ")");
         }
 
         bb.putInt(rowStart, (int)row[0]);
@@ -492,50 +478,42 @@ os.write("POSI".getBytes(StandardCharsets.UTF_8));
     }
 
     //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("DATA".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
-        }
+    os.write(bb.array());
+    XPCDirector.Instance.Send(PackValues("DATA", 0xFF, ).ToArray());
+}
 
-        /**
-         * Selects what data X-Plane will export over UDP.
-         *
-         * @param rows The row numbers to select.
-         * @throws IOException If the command cannot be sent.
-         */
-        public void selectDATA(int[] rows) throws IOException {
-            //Preconditions
-            if(rows == null || rows.Length == 0)
-            {
-        throw new IllegalArgumentException("rows must be a non-null, non-empty array.");
+/**
+ * Selects what data X-Plane will export over UDP.
+ *
+ * @param rows The row numbers to select.
+ * @throws IOException If the command cannot be sent.
+ */
+public void SelectDATA(int[] rows) {
+    //Preconditions
+    if (rows == null || rows.Length == 0) {
+        throw new ArgumentException("rows must be a non-null, non-empty array.");
     }
 
     //Convert data to bytes
     ByteBuffer bb = ByteBuffer.allocate(4 * rows.Length);
     bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(int i = 0; i < rows.Length; ++i)
-            {
+    for (int i = 0; i < rows.Length; ++i) {
         bb.putInt(i * 4, rows[i]);
     }
 
     //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("DSEL".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
-        }
+    os.write(bb.array());
+    XPCDirector.Instance.Send(PackValues("DSEL", 0xFF, ).ToArray());
+}
 
-        /**
-         * Sets a message to be displayed on the screen in X-Plane at the default screen location.
-         *
-         * @param msg The message to display. Should not contain any newline characters.
-         * @throws IOException If the command cannot be sent.
-         */
-        public void sendTEXT(String msg) throws IOException {
-    sendTEXT(msg, -1, -1);
+/**
+ * Sets a message to be displayed on the screen in X-Plane at the default screen location.
+ *
+ * @param msg The message to display. Should not contain any newline characters.
+ * @throws IOException If the command cannot be sent.
+ */
+public void SendTEXT(string msg) {
+    SendTEXT(msg, -1, -1);
 }
 
 /**
@@ -546,19 +524,16 @@ os.write("DSEL".getBytes(StandardCharsets.UTF_8));
  * @param y   The number of pixels from the bottom edge of the screen to display the text.
  * @throws IOException If the command cannot be sent.
  */
-public void sendTEXT(String msg, int x, int y) throws IOException {
-            //Preconditions
-            if(msg == null)
-            {
+public void SendTEXT(string msg, int x, int y) {
+    //Preconditions
+    if (msg == null) {
         msg = "";
     }
 
-            //Convert drefs to bytes.
-            byte[]
-    msgBytes = msg.getBytes(StandardCharsets.UTF_8);
-            if(msgBytes.Length > 255)
-            {
-        throw new IllegalArgumentException("msg must be less than 255 bytes in UTF-8.");
+    //Convert drefs to bytes.
+    byte[] msgBytes = msg.getBytes(StandardCharsets.UTF_8);
+    if (msgBytes.Length > 255) {
+        throw new ArgumentException("msg must be less than 255 bytes in UTF-8.");
     }
 
     ByteBuffer bb = ByteBuffer.allocate(8);
@@ -567,96 +542,84 @@ public void sendTEXT(String msg, int x, int y) throws IOException {
     bb.putInt(4, y);
 
     //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("TEXT".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(bb.array());
-            os.write(msgBytes.Length);
-            os.write(msgBytes);
-            sendUDP(os.toByteArray());
-        }
+    os.write(bb.array());
+    XPCDirector.Instance.Send(PackValues("TEXT", 0xFF, , msgBytes.Length, msgBytes).ToArray());
+}
 
-        /**
-         * Sets the camera view in X-Plane.
-         *
-         * @param view The view to use.
-         * @throws IOException If the command cannot be sent.
-         */
-        public void sendVIEW(ViewType view) throws IOException {
+/**
+ * Sets the camera view in X-Plane.
+ *
+ * @param view The view to use.
+ * @throws IOException If the command cannot be sent.
+ */
+public void SendVIEW(ViewType view) {
     ByteBuffer bb = ByteBuffer.allocate(4);
     bb.order(ByteOrder.LITTLE_ENDIAN);
     bb.putInt(view.getValue());
 
     //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("VIEW".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
-        }
+    os.write(bb.array());
+    XPCDirector.Instance.Send(PackValues("VIEW", 0xFF, ).ToArray());
+}
 
-        /**
-         * Adds, removes, or clears a set of waypoints. If the command is clear, the points are ignored
-         * and all points are removed.
-         *
-         * @param op     The operation to perform.
-         * @param points An array of values representing points. Each triplet in the array will be
-         *               interpreted as a (Lat, Lon, Alt) point.
-         * @throws IOException  If the command cannot be sent.
-         */
-        public void sendWYPT(WaypointOp op, float[] points) throws IOException {
-            //Preconditions
-            if(points.Length % 3 != 0)
-            {
-        throw new IllegalArgumentException("points.Length should be divisible by 3.");
+/**
+ * Adds, removes, or clears a set of waypoints. If the command is clear, the points are ignored
+ * and all points are removed.
+ *
+ * @param op     The operation to perform.
+ * @param points An array of values representing points. Each triplet in the array will be
+ *               interpreted as a (Lat, Lon, Alt) point.
+ * @throws IOException  If the command cannot be sent.
+ */
+public void SendWYPT(WaypointOp op, float[] points) {
+    //Preconditions
+    if (points.Length % 3 != 0) {
+        throw new ArgumentException("points.Length should be divisible by 3.");
     }
-            if(points.Length / 3 > 255)
-            {
-        throw new IllegalArgumentException("Too many points. Must be less than 256.");
+    if (points.Length / 3 > 255) {
+        throw new ArgumentException("Too many points. Must be less than 256.");
     }
 
     //Convert points to bytes
     ByteBuffer bb = ByteBuffer.allocate(4 * points.Length);
     bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(float f : points)
-            {
+    for (float f : points) {
         bb.putFloat(f);
     }
 
     //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("WYPT".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(op.getValue());
-            os.write(points.Length / 3);
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
-        }
+    os.write(bb.array());
+    XPCDirector.Instance.Send(PackValues("WYPT", 0xFF, op.getValue(), points.Length / 3, ).ToArray);
+}
 
-        /**
-         * Sets the port on which the client will receive data from X-Plane.
-         *
-         * @param port The new incoming port number.
-         * @throws IOException If the command cannot be sent.
-         */
-        public void setCONN(int port) throws IOException {
-            if(port < 0 || port >= 0xFFFF)
-            {
-        throw new IllegalArgumentException("Invalid port (must be non-negative and less than 65536).");
+/**
+ * Sets the port on which the client will receive data from X-Plane.
+ *
+ * @param port The new incoming port number.
+ * @throws IOException If the command cannot be sent.
+ */
+public void SetCONN(int port) {
+    if (port < 0 || port >= 0xFFFF) {
+        throw new ArgumentException("Invalid port (must be non-negative and less than 65536).");
     }
 
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("CONN".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write((byte) port);
-            os.write((byte) (port >> 8));
-            sendUDP(os.toByteArray());
+    XPCDirector.Instance.Send(PackValues("CONN", 0xFF, port, port >> 8).ToArray());
 
-int soTimeout = socket.getSoTimeout();
-socket.close();
-            socket = new DatagramSocket(port);
-socket.setSoTimeout(soTimeout);
-            readUDP(); // Try to read response
-        }
-        }
+    int soTimeout = socket.getSoTimeout();
+    socket.close();
+    socket = new DatagramSocket(port);
+    socket.setSoTimeout(soTimeout);
+    readUDP(); // Try to read response
+}
+
+private List<byte> PackValues(params object[] values) {
+    List<byte> msg = new List<byte>();
+
+    foreach (object v in values) {
+        msg.AddRange(Encoding.UTF8.GetBytes(v.ToString()));
     }
+
+    return msg;
+}
+    }
+}
