@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using XPlaneSituationTrainer.Lib.Commanding;
 
 namespace XPlaneSituationTrainer.Lib.Commanding {
     public class XPCDirector {
@@ -332,7 +333,7 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
 /// <param name="ac">The aircraft to get position information for.</param>
 /// <returns>An array containing control surface data in the same format as {@code sendPOSI}.</returns>
 /// <exception cref="IOException">If the command cannot be sent or a response cannot be read.</exception>
-public float[] GetPOSI(int ac) {
+public double[] GetPOSI(int ac) {
     // Send request
     XPCDirector.Instance.Send(PackValues("GETP", 0xFF, ac).ToArray());
 
@@ -346,11 +347,14 @@ public float[] GetPOSI(int ac) {
     }
 
     // Parse response
-    float[] result = new float[7];
-    ByteBuffer bb = ByteBuffer.wrap(data);
-    bb.order(ByteOrder.LITTLE_ENDIAN);
+    double[] result = new double[7];
+
+    if (BitConverter.IsLittleEndian) {
+        Array.Reverse(data);
+    }
+    
     for (int i = 0; i < 7; ++i) {
-        result[i] = bb.getFloat(6 + 4 * i);
+        result[i] = BitConverter.ToDouble(data, 6 + 4 * i);
     }
     return result;
 }
@@ -414,8 +418,9 @@ public void SendPOSI(float[] values, int ac) {
 
     //Pad command values and convert to bytes
     int i;
-    ByteBuffer bb = ByteBuffer.allocate(28);
-    bb.order(ByteOrder.LITTLE_ENDIAN);
+
+    byte[] bb = new byte[28];
+    
     for (i = 0; i < values.Length; ++i) {
         bb.putFloat(i * 4, values[i]);
     }
@@ -553,13 +558,14 @@ public void SendTEXT(string msg, int x, int y) {
  * @throws IOException If the command cannot be sent.
  */
 public void SendVIEW(ViewType view) {
-    ByteBuffer bb = ByteBuffer.allocate(4);
-    bb.order(ByteOrder.LITTLE_ENDIAN);
-    bb.putInt(view.getValue());
+    Array bytes = BitConverter.GetBytes((int)view);
+
+    if (BitConverter.IsLittleEndian) {
+        Array.Reverse(bytes);
+    }
 
     //Build and send message
-    os.write(bb.array());
-    XPCDirector.Instance.Send(PackValues("VIEW", 0xFF, ).ToArray());
+    XPCDirector.Instance.Send(PackValues("VIEW", 0xFF, bytes).ToArray());
 }
 
 /**
@@ -589,7 +595,7 @@ public void SendWYPT(WaypointOp op, float[] points) {
 
     //Build and send message
     os.write(bb.array());
-    XPCDirector.Instance.Send(PackValues("WYPT", 0xFF, op.getValue(), points.Length / 3, ).ToArray);
+    XPCDirector.Instance.Send(PackValues("WYPT", 0xFF, (int)op, points.Length / 3, ).ToArray);
 }
 
 /**
