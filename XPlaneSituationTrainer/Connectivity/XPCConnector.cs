@@ -4,21 +4,42 @@ using System.Threading.Tasks;
 
 namespace XPlaneSituationTrainer.Lib.Connectivity {
     public class XPCConnector {
-        private readonly UdpClient Client;
+        #region Attributes
+        private static XPCConnector _instance;
+        #endregion
+
+        #region Properties
+        public static XPCConnector Instance {
+            get {
+                if (_instance == null) {
+                    _instance = new XPCConnector();
+                }
+
+                return _instance;
+            }
+        }
+
+        public UdpClient Client { get; private set; }
+        public bool Connected { get; private set; }
+        #endregion
 
         private XPCConnector() {
             Client = new UdpClient();
         }
 
-        public static XPCConnector ConnectTo(string hostname, int port) {
-            var connection = new XPCConnector();
-            connection.Client.Connect(hostname, port);
-            return connection;
+        public void ConnectTo(string hostname, int port) {
+            _instance.Client.Connect(hostname, port);
+            Connected = true;
         }
 
         public void Send(string message) {
-            var datagram = Encoding.ASCII.GetBytes(message);
-            Client.Send(datagram, datagram.Length);
+            Send(Encoding.UTF8.GetBytes(message));
+        }
+
+        public void Send(byte[] message) {
+            if (Connected) {
+                Client.Send(message, message.Length);
+            }
         }
 
         public async Task<XPCUdpMsgReceived> Receive() {
