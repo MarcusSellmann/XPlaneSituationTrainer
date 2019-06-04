@@ -1,4 +1,10 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text;
+
+using XPlaneSituationTrainer.Lib.Connectivity;
+
 namespace XPlaneSituationTrainer.Lib.Commanding {
     public class XPCDirector {
         public XPCDirector() {
@@ -13,85 +19,83 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             //            S     I     M     U     LEN   VAL
             byte[] msg = { 0x53, 0x49, 0x4D, 0x55, 0x00, 0x00 };
             msg[5] = (byte)(pause ? 0x01 : 0x00);
-            sendUDP(msg);
+            XPCConnector.Instance.Send(msg);
         }
 
         /// <summary>
         /// Pauses, unpauses, or switches the pause state of X-Plane.
         /// </summary>
         /// <param name="pause">{@code 1} to pause the simulator, {@code 0} to unpause, or {@code 2} to switch.</param>
-        /// <exception cref="IllegalArgumentException">If the values of {@code pause} is not a valid command.</exception>
+        /// <exception cref="ArgumentException">If the values of {@code pause} is not a valid command.</exception>
         /// <exception cref="IOException">If the command cannot be sent.</exception>
         public void PauseSim(int pause) {
             if (pause < 0 || pause > 2) {
-                throw new IllegalArgumentException("pause must be a value in the range [0, 2].");
+                throw new ArgumentException("pause must be a value in the range [0, 2].");
             }
 
             //            S     I     M     U     LEN   VAL
-            byte[]
-            msg = { 0x53, 0x49, 0x4D, 0x55, 0x00, 0x00 };
+            byte[] msg = { 0x53, 0x49, 0x4D, 0x55, 0x00, 0x00 };
             msg[5] = (byte)pause;
-            sendUDP(msg);
+            XPCConnector.Instance.Send(msg);
         }
 
-        /**
-         * Requests a single dref value from X-Plane.
-         *
-         * @param dref The name of the dref requested.
-         * @return     A byte array representing data dependent on the dref requested.
-         * @throws IOException If either the request or the response fails.
-         */
-        public float[] getDREF(string dref) {
-            return getDREFs(new string[] { dref })[0];
+        /// <summary>
+        /// Requests a single dref value from X-Plane.
+        /// </summary>
+        /// <returns>A byte array representing data dependent on the dref requested.</returns>
+        /// <param name="dref">The name of the dref requested.</param>
+        /// <exception cref="IOException">If either the request or the response fails.</exception>
+        public float[] GetDREF(string dref) {
+            return GetDREFs(new string[] { dref })[0];
         }
 
-        /**
-         * Requests several dref values from X-Plane.
-         *
-         * @param drefs An array of dref names to request.
-         * @return      A multidimensional array representing the data for each requested dref.
-         * @throws IOException If either the request or the response fails.
-         */
-        public float[][] getDREFs(string[] drefs) {
+        /// <summary>
+        /// Requests several dref values from X-Plane.
+        /// </summary>
+        /// <returns>A multidimensional array representing the data for each requested dref.</returns>
+        /// <param name="drefs">An array of dref names to request.</param>
+        /// <exception cref="ArgumentException"></exception>
+        /// <exception cref="IOException">If either the request or the response fails.</exception>
+        public float[][] GetDREFs(string[] drefs) {
             //Preconditions
             if (drefs == null || drefs.Length == 0) {
-                throw new IllegalArgumentException("drefs must be a valid array with at least one dref.");
+                throw new ArgumentException("drefs must be a valid array with at least one dref.");
             }
 
             if (drefs.Length > 255) {
-                throw new IllegalArgumentException("Can not request more than 255 DREFs at once.");
+                throw new ArgumentException("Can not request more than 255 DREFs at once.");
             }
 
             //Convert drefs to bytes.
             byte[][] drefBytes = new byte[drefs.Length][];
 
             for (int i = 0; i < drefs.Length; ++i) {
-                drefBytes[i] = drefs[i].getBytes(StandardCharsets.UTF_8);
+                drefBytes[i] = Encoding.UTF8.GetBytes(drefs[i]);
 
                 if (drefBytes[i].Length == 0) {
-                    throw new IllegalArgumentException("DREF " + i + " is an empty string!");
+                    throw new ArgumentException("DREF " + i + " is an empty string!");
                 }
 
                 if (drefBytes[i].Length > 255) {
-                    throw new IllegalArgumentException("DREF " + i + " is too long (must be less than 255 bytes in UTF-8). Are you sure this is a valid DREF?");
+                    throw new ArgumentException("DREF " + i + " is too long (must be less than 255 bytes in UTF-8). Are you sure this is a valid DREF?");
                 }
             }
 
             //Build and send message
-            ByteArrayOutputStream os = new ByteArrayOutputStream();
-            os.write("GETD".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(drefs.Length);
+            List<byte> sendMsg = new List<byte>();
+            sendMsg.AddRange(Encoding.UTF8.GetBytes("GETD"));
+            sendMsg.Add(0xFF);
+            sendMsg.Add((byte)drefs.Length);
 
-            for (byte[] dref in drefBytes) {
-                os.write(dref.Length);
-                os.write(dref, 0, dref.Length);
+            foreach (byte[] dref in drefBytes) {
+                sendMsg.Add((byte)dref.Length);
+                sendMsg.AddRange(dref);
             }
 
-            sendUDP(os.toByteArray());
+            XPCConnector.Instance.Send(sendMsg.ToArray());
 
             //Read response
-            byte[] data = readUDP();
+            byte[] data = XPCConnector.Instance.Receive();
             if (data.Length == 0) {
                 throw new IOException("No response received.");
             }
@@ -101,111 +105,94 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             }
 
             float[][] result = new float[drefs.Length][];
-            ByteBuffer bb = ByteBuffer.wrap(data);
-            bb.order(ByteOrder.LITTLE_ENDIAN);
             int cur = 6;
 
+            // TODO: Wird so nicht funktionieren!
             for (int j = 0; j < result.Length; ++j) {
                 result[j] = new float[data[cur++]];
-                for (int k = 0; k < result[j].Length; ++k) //TODO: There must be a better way to do this
-                {
-                    result[j][k] = bb.getFloat(cur);
+                for (int k = 0; k < result[j].Length; ++k) {
+
+                    result[j][k] = data[cur];
                     cur += 4;
                 }
             }
             return result;
         }
 
-        public void sendDREF(String dref, float value) {
-            sendDREF(dref, new float[] { value });
+        public void SendDREF(string dref, float value) {
+            SendDREF(dref, new float[] { value });
         }
 
-        /**
-         * Sends a command to X-Plane that sets the given DREF.
-         *
-         * @param dref  The name of the X-Plane dataref to set.
-         * @param value An array of floating point values whose structure depends on the dref specified.
-         * @throws IOException If the command cannot be sent.
-         */
-        public void sendDREF(String dref, float[] value) {
-            sendDREFs(new String[] { dref }, new float[][] { value });
+        /// <summary>
+        /// Sends a command to X-Plane that sets the given DREF.
+        /// </summary>
+        /// <param name="dref">The name of the X-Plane dataref to set.</param>
+        /// <param name="value">An array of floating point values whose structure depends on the dref specified.</param>
+        /// <exception cref="IOException">If the command cannot be sent.</exception>
+        public void SendDREF(string dref, float[] value) {
+            SendDREFs(new string[] { dref }, new float[][] { value });
         }
 
-        /**
-         * Sends a command to X-Plane that sets the given DREF.
-         *
-         * @param drefs  The names of the X-Plane datarefs to set.
-         * @param values A sequence of arrays of floating point values whose structure depends on the drefs specified.
-         * @throws IOException If the command cannot be sent.
-         */
-        public void sendDREFs(String[] drefs, float[][] values) {
+        /// <summary>
+        /// Sends a command to X-Plane that sets the given DREF.
+        /// </summary>
+        /// <param name="drefs">The names of the X-Plane datarefs to set.</param>
+        /// <param name="values">A sequence of arrays of floating point values whose structure depends on the drefs specified.</param>
+        /// <exception cref="IOException">If the command cannot be sent.</exception>
+        public void SendDREFs(string[] drefs, float[][] values) {
             //Preconditions
             if (drefs == null || drefs.Length == 0) {
-                throw new IllegalArgumentException(("drefs must be non-empty."));
+                throw new ArgumentException(("drefs must be non-empty."));
             }
-
             if (values == null || values.Length != drefs.Length) {
-                throw new IllegalArgumentException("values must be of the same size as drefs.");
+                throw new ArgumentException("values must be of the same size as drefs.");
             }
 
-            ByteArrayOutputStream os = new ByteArrayOutputStream();
-            os.write("DREF".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
+            List<byte> sendMsg = new List<byte>();
+            sendMsg.AddRange(PackValues("DREF", 0xFF));
 
             for (int i = 0; i < drefs.Length; ++i) {
-                String dref = drefs[i];
+                string dref = drefs[i];
                 float[] value = values[i];
 
                 if (dref == null) {
-                    throw new IllegalArgumentException("dref must be a valid string.");
+                    throw new ArgumentException("dref must be a valid string.");
                 }
                 if (value == null || value.Length == 0) {
-                    throw new IllegalArgumentException("value must be non-null and should contain at least one value.");
+                    throw new ArgumentException("value must be non-null and should contain at least one value.");
                 }
 
                 //Convert drefs to bytes.
-                byte[] drefBytes = dref.getBytes(StandardCharsets.UTF_8);
+                byte[] drefBytes = Encoding.UTF8.GetBytes(dref);
                 if (drefBytes.Length == 0) {
-                    throw new IllegalArgumentException("DREF is an empty string!");
+                    throw new ArgumentException("DREF is an empty string!");
                 }
                 if (drefBytes.Length > 255) {
-                    throw new IllegalArgumentException("dref must be less than 255 bytes in UTF-8. Are you sure this is a valid dref?");
+                    throw new ArgumentException("dref must be less than 255 bytes in UTF-8. Are you sure this is a valid dref?");
                 }
 
-                ByteBuffer bb = ByteBuffer.allocate(4 * value.Length);
-                bb.order(ByteOrder.LITTLE_ENDIAN);
-
-                for (int j = 0; j < value.Length; ++j) {
-                    bb.putFloat(j * 4, value[j]);
-                }
-
+                byte[] buffer = new byte[4 * value.Length];
+                Buffer.BlockCopy(value, 0, buffer, 0, buffer.Length);
+                
                 //Build and send message
-                os.write(drefBytes.Length);
-                os.write(drefBytes, 0, drefBytes.Length);
-                os.write(value.Length);
-                os.write(bb.array());
+                sendMsg.AddRange(PackValues(drefBytes.Length, drefBytes, value.Length, buffer));
             }
 
-            sendUDP(os.toByteArray());
+            XPCConnector.Instance.Send(sendMsg.ToArray());
         }
 
-        /**
-         * Gets the control surface information for the specified airplane.
-         *
-         * @param ac The aircraft to get control surface information for.
-         * @return An array containing control surface data in the same format as {@code sendCTRL}.
-         * @throws IOException If the command cannot be sent or a response cannot be read.
-         */
-        public float[] getCTRL(int ac) {
+        /// <summary>
+        /// Gets the control surface information for the specified airplane.
+        /// </summary>
+        /// <returns>An array containing control surface data in the same format as {@code sendCTRL}.</returns>
+        /// <param name="ac">The aircraft to get control surface information for.</param>
+        /// <exception cref="IOException">If the command cannot be sent or a response cannot be read.</exception>
+        public float[] GetCTRL(int ac) {
             // Send request
-            ByteArrayOutputStream os = new ByteArrayOutputStream();
-            os.write("GETC".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(ac);
-            sendUDP(os.toByteArray());
+            XPCConnector.Instance.Send(PackValues("GETC", 0xFF, ac));
 
             // Read response
-            byte[] data = readUDP();
+            byte[] data = XPCConnector.Instance.Receive();
             if (data.Length == 0) {
                 throw new IOException("No response received.");
             }
@@ -215,144 +202,129 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
 
             // Parse response
             float[] result = new float[7];
-            ByteBuffer bb = ByteBuffer.wrap(data);
-            bb.order(ByteOrder.LITTLE_ENDIAN);
-            result[0] = bb.getFloat(5);
-            result[1] = bb.getFloat(9);
-            result[2] = bb.getFloat(13);
-            result[3] = bb.getFloat(17);
-            result[4] = bb.get(21);
-            result[5] = bb.getFloat(22);
-            result[6] = bb.getFloat(27);
+            result[0] = data[5];
+            result[1] = data[9];
+            result[2] = data[13];
+            result[3] = data[17];
+            result[4] = data[21];
+            result[5] = data[22];
+            result[6] = data[27];
             return result;
         }
 
-        /**
-         * Sends command to X-Plane setting control surfaces on the player ac.
-         *
-         * @param values <p>An array containing zero to six values representing control surface data as follows:</p>
-         *               <ol>
-         *                   <li>Latitudinal Stick [-1,1]</li>
-         *                   <li>Longitudinal Stick [-1,1]</li>
-         *                   <li>Rudder Pedals [-1, 1]</li>
-         *                   <li>Throttle [-1, 1]</li>
-         *                   <li>Gear (0=up, 1=down)</li>
-         *                   <li>Flaps [0, 1]</li>
-         *                     <li>Speedbrakes [-0.5, 1.5]</li>
-         *               </ol>
-         *               <p>
-         *                   If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To
-         *                   change values in the middle of the array without affecting the preceding values, set the
-         *                   preceding values to -998.
-         *               </p>
-         * @throws IOException If the command cannot be sent.
-         */
-        public void sendCTRL(float[] values) throws IOException {
-            sendCTRL(values, 0);
-}
+        /// <summary>
+        /// Sends command to X-Plane setting control surfaces on the player ac.
+        /// </summary>
+        /// <param name="values"><p>An array containing zero to six values representing control surface data as follows:</p>
+        ///              <ol>
+        ///                  <li>Latitudinal Stick[-1, 1]</li>
+        ///                  <li>Longitudinal Stick[-1, 1]</li>
+        ///                  <li>Rudder Pedals[-1, 1]</li>
+        ///                  <li>Throttle[-1, 1]</li>
+        ///                  <li>Gear(0=up, 1=down)</li>
+        ///                  <li>Flaps[0, 1]</li>
+        ///                  <li>Speedbrakes[-0.5, 1.5]</li>
+        ///              </ol>
+        ///              <p>
+        ///                  If @{code ctrl} is less than 6 elements long. The missing elements will not be changed. To change values in the middle of the array without affecting the preceding values, set the preceding values to -998.
+        ///              </p></param>
+        public void SendCTRL(float[] values) {
+            SendCTRL(values, 0);
+        }
 
-    /**
-     * Sends command to X-Plane setting control surfaces on the specified ac.
-     *
-     * @param values   <p>An array containing zero to six values representing control surface data as follows:</p>
-     *                 <ol>
-     *                     <li>Latitudinal Stick [-1,1]</li>
-     *                     <li>Longitudinal Stick [-1,1]</li>
-     *                     <li>Rudder Pedals [-1, 1]</li>
-     *                     <li>Throttle [-1, 1]</li>
-     *                     <li>Gear (0=up, 1=down)</li>
-     *                     <li>Flaps [0, 1]</li>
-     *                     <li>Speedbrakes [-0.5, 1.5]</li>
-     *                 </ol>
-     *                 <p>
-     *                     If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To
-     *                     change values in the middle of the array without affecting the preceding values, set the
-     *                     preceding values to -998.
-     *                 </p>
-     * @param ac The ac to set. 0 for the player's ac.
-     * @throws IOException If the command cannot be sent.
-     */
-    public void sendCTRL(float[] values, int ac) throws IOException {
+        /// <summary>
+        /// Sends command to X-Plane setting control surfaces on the specified ac.
+        /// </summary>
+        /// <param name="values"><p>An array containing zero to six values representing control surface data as follows:</p>
+        ///                <ol>
+        ///                    <li>Latitudinal Stick[-1, 1]</li>
+        ///                    <li>Longitudinal Stick[-1, 1]</li>
+        ///                    <li>Rudder Pedals[-1, 1]</li>
+        ///                    <li>Throttle[-1, 1]</li>
+        ///                    <li>Gear(0=up, 1=down)</li>
+        ///                    <li>Flaps[0, 1]</li>
+        ///                    <li>Speedbrakes[-0.5, 1.5]</li>
+        ///                </ol>
+        ///                <p>
+        ///                    If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To change values in the middle of the array without affecting the preceding values, set the preceding values to -998.
+        ///                </p></param>
+        /// <param name="ac">Ac.</param>
+        /// <exception cref="IOException">If the command cannot be sent or a response cannot be read.</exception>
+        public void SendCTRL(float[] values, int ac) {
             //Preconditions
-            if(values == null)
-            {
-            throw new IllegalArgumentException("ctrl must no be null.");
-        }
-            if(values.Length > 7)
-            {
-            throw new IllegalArgumentException("ctrl must have 7 or fewer elements.");
-        }
-            if(ac < 0 || ac > 9)
-            {
-            throw new IllegalArgumentException("ac must be non-negative and less than 9.");
-        }
+            if (values == null) {
+                throw new ArgumentException("ctrl must no be null.");
+            }
+            if (values.Length > 7) {
+                throw new ArgumentException("ctrl must have 7 or fewer elements.");
+            }
+            if (ac < 0 || ac > 9) {
+                throw new ArgumentException("ac must be non-negative and less than 9.");
+            }
 
             //Pad command values and convert to bytes
             int i;
             int cur = 0;
-        ByteBuffer bb = ByteBuffer.allocate(26);
-        bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(i = 0; i < 6; ++i)
-            {
-            if (i == 4) {
-                if (i >= values.Length) {
-                    bb.put(cur, (byte)-1);
+            List<byte> buffer = new List<byte>();
+
+            for (i = 0; i < 6; ++i) {
+                if (i == 4) {
+                    if (i >= values.Length) {
+                        unchecked { buffer.Add((byte)-1); }
+                    } else {
+                        buffer.AddRange(BitConverter.GetBytes(values[i]));
+                    }
+                    cur += 1;
+                } else if (i >= values.Length) {
+                    unchecked { buffer.Add((byte)-998); }
+                    cur += 4;
                 } else {
-                    bb.put(cur, (byte)values[i]);
+                    buffer.AddRange(BitConverter.GetBytes(values[i]));
+                    cur += 4;
                 }
-                cur += 1;
-            } else if (i >= values.Length) {
-                bb.putFloat(cur, -998);
-                cur += 4;
-            } else {
-                bb.putFloat(cur, values[i]);
-                cur += 4;
             }
+
+            buffer.Add((byte)ac);
+            
+            if (values.Length == 7) {
+                buffer.AddRange(BitConverter.GetBytes(values[6]));
+            } else {
+                unchecked { buffer.Add((byte)-998); }
+            }
+
+            //Build and send message
+            XPCConnector.Instance.Send(PackValues("CTRL", 0xFF, buffer.ToArray()));
         }
-        bb.put(cur++, (byte) ac);
-        bb.putFloat(cur, values.Length == 7 ? values [6] : -998);
 
-        //Build and send message
-        ByteArrayOutputStream os = new ByteArrayOutputStream();
-    os.write("CTRL".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
-}
+        /// <summary>
+        /// Gets position information for the specified airplane.
+        /// </summary>
+        /// 
+        /// <param name="ac">The aircraft to get position information for.</param>
+        /// <returns>An array containing control surface data in the same format as {@code sendPOSI}.</returns>
+        /// <exception cref="IOException">If the command cannot be sent or a response cannot be read.</exception>
+        public double[] GetPOSI(int ac) {
+            // Send request
+            XPCConnector.Instance.Send(PackValues("GETP", 0xFF, ac));
 
-/**
- * Gets position information for the specified airplane.
- *
- * @param ac The aircraft to get position information for.
- * @return An array containing control surface data in the same format as {@code sendPOSI}.
- * @throws IOException If the command cannot be sent or a response cannot be read.
- */
-public float[] getPOSI(int ac) throws IOException {
-    // Send request
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("GETP".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(ac);
-            sendUDP(os.toByteArray());
-
-// Read response
-byte[] data = readUDP();
-            if(data.Length == 0)
-            {
+            // Read response
+            byte[] data = XPCConnector.Instance.Receive();
+            if (data.Length == 0) {
                 throw new IOException("No response received.");
             }
-            if(data.Length< 34)
-            {
+            if (data.Length < 34) {
                 throw new IOException("Response too short");
             }
 
             // Parse response
-            float[] result = new float[7];
-ByteBuffer bb = ByteBuffer.wrap(data);
-bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(int i = 0; i< 7; ++i)
-            {
-                result[i] = bb.getFloat(6 + 4 * i);
+            double[] result = new double[7];
+
+            if (BitConverter.IsLittleEndian) {
+                Array.Reverse(data);
+            }
+
+            for (int i = 0; i < 7; ++i) {
+                result[i] = BitConverter.ToDouble(data, 6 + 4 * i);
             }
             return result;
         }
@@ -377,66 +349,56 @@ bb.order(ByteOrder.LITTLE_ENDIAN);
          *                 </p>
          * @throws IOException If the command can not be sent.
          */
-        public void sendPOSI(float[] values) throws IOException {
-    sendPOSI(values, 0);
-}
+        public void SendPOSI(float[] values) {
+            SendPOSI(values, 0);
+        }
 
-/**
- * Sets the position of the specified ac.
- *
- * @param values   <p>An array containing position elements as follows:</p>
- *                 <ol>
- *                     <li>Latitude (deg)</li>
- *                     <li>Longitude (deg)</li>
- *                     <li>Altitude (m above MSL)</li>
- *                     <li>Roll (deg)</li>
- *                     <li>Pitch (deg)</li>
- *                     <li>True Heading (deg)</li>
- *                     <li>Gear (0=up, 1=down)</li>
- *                 </ol>
- *                 <p>
- *                     If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To
- *                     change values in the middle of the array without affecting the preceding values, set the
- *                     preceding values to -998.
- *                 </p>
- * @param ac The ac to set. 0 for the player ac.
- * @throws IOException If the command can not be sent.
- */
-public void sendPOSI(float[] values, int ac) throws IOException {
+        /**
+         * Sets the position of the specified ac.
+         *
+         * @param values   <p>An array containing position elements as follows:</p>
+         *                 <ol>
+         *                     <li>Latitude (deg)</li>
+         *                     <li>Longitude (deg)</li>
+         *                     <li>Altitude (m above MSL)</li>
+         *                     <li>Roll (deg)</li>
+         *                     <li>Pitch (deg)</li>
+         *                     <li>True Heading (deg)</li>
+         *                     <li>Gear (0=up, 1=down)</li>
+         *                 </ol>
+         *                 <p>
+         *                     If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To
+         *                     change values in the middle of the array without affecting the preceding values, set the
+         *                     preceding values to -998.
+         *                 </p>
+         * @param ac The ac to set. 0 for the player ac.
+         * @throws IOException If the command can not be sent.
+         */
+        public void SendPOSI(float[] values, int ac) {
             //Preconditions
-            if(values == null)
-            {
-        throw new IllegalArgumentException("posi must no be null.");
-    }
-            if(values.Length > 7)
-            {
-        throw new IllegalArgumentException("posi must have 7 or fewer elements.");
-    }
-            if(ac < 0 || ac > 255)
-            {
-        throw new IllegalArgumentException("ac must be between 0 and 255.");
-    }
+            if (values == null) {
+                throw new ArgumentException("posi must no be null.");
+            }
+            if (values.Length > 7) {
+                throw new ArgumentException("posi must have 7 or fewer elements.");
+            }
+            if (ac < 0 || ac > 255) {
+                throw new ArgumentException("ac must be between 0 and 255.");
+            }
 
             //Pad command values and convert to bytes
-            int i;
-    ByteBuffer bb = ByteBuffer.allocate(28);
-    bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(i = 0; i < values.Length; ++i)
-            {
-        bb.putFloat(i * 4, values[i]);
-    }
-            for(; i < 7; ++i)
-            {
-        bb.putFloat(i * 4, -998);
-    }
+            List<byte> buffer = new List<byte>();
 
-    //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("POSI".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(ac);
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
+            foreach (float f in values) {
+                buffer.AddRange(BitConverter.GetBytes(f));
+            }
+
+            if (values.Length < 7) {
+                unchecked { buffer.Add((byte)-998); }
+            }
+
+            //Build and send message
+            XPCConnector.Instance.Send(PackValues("POSI", 0xFF, ac, buffer.ToArray()));
         }
 
         /**
@@ -445,21 +407,22 @@ os.write("POSI".getBytes(StandardCharsets.UTF_8));
          * @return The data read.
          * @throws IOException If the read operation fails.
          */
-        public float[][] readData() throws IOException {
-            byte[]
-    buffer = readUDP();
-    ByteBuffer bb = ByteBuffer.wrap(buffer);
+        public float[][] ReadData() {
+            byte[] buffer = XPCConnector.Instance.Receive();
             int cur = 5;
-            int len = bb.get(cur++);
-    float[][] result = new float[bb.get(len)][9];
-    for (int i = 0; i < len; ++i) {
-        for (int j = 0; j < 9; ++j) {
-            result[i][j] = bb.getFloat(cur);
-            cur += 4;
+            int len = buffer[cur++];
+            float[][] result = new float[buffer.Length][];
+
+            for (int i = 0; i < len; ++i) {
+                result[i] = new float[9];
+
+                for (int j = 0; j < 9; ++j) {
+                    result[i][j] = buffer[cur];
+                    cur += 4;
+                }
+            }
+            return result;
         }
-    }
-    return result;
-    }
 
         /**
          * Sends data to X-Plane
@@ -467,36 +430,31 @@ os.write("POSI".getBytes(StandardCharsets.UTF_8));
          * @param data The data to send.
          * @throws IOException If the command cannot be sent.
          */
-        public void sendDATA(float[][] data) throws IOException {
+        public void SendDATA(float[][] data) {
             //Preconditions
-            if(data == null || data.Length == 0)
-            {
-        throw new IllegalArgumentException("data must be a non-null, non-empty array.");
-    }
+            if (data == null || data.Length == 0) {
+                throw new ArgumentException("data must be a non-null, non-empty array.");
+            }
 
-    //Convert data to bytes
-    ByteBuffer bb = ByteBuffer.allocate(4 * 9 * data.Length);
-    bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(int i = 0; i < data.Length; ++i)
-            {
-        int rowStart = 9 * 4 * i;
-        float[] row = data[i];
-        if (row.Length != 9) {
-            throw new IllegalArgumentException("Rows must contain exactly 9 items. (Row " + i + ")");
-        }
+            //Convert data to bytes
+            List<byte> buffer = new List<byte>();
+            
+            for (int i = 0; i < data.Length; ++i) {
+                int rowStart = 9 * 4 * i;
+                float[] row = data[i];
+                if (row.Length != 9) {
+                    throw new ArgumentException("Rows must contain exactly 9 items. (Row " + i + ")");
+                }
 
-        bb.putInt(rowStart, (int)row[0]);
-        for (int j = 1; j < row.Length; ++j) {
-            bb.putFloat(rowStart + 4 * j, row[j]);
-        }
-    }
+                buffer.AddRange(BitConverter.GetBytes(row[0]));
+                
+                for (int j = 1; j < row.Length; ++j) {
+                    buffer.AddRange(BitConverter.GetBytes(row[j]));
+                }
+            }
 
-    //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("DATA".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
+            //Build and send message
+            XPCConnector.Instance.Send(PackValues("DATA", 0xFF, buffer.ToArray()));
         }
 
         /**
@@ -505,27 +463,18 @@ os.write("DATA".getBytes(StandardCharsets.UTF_8));
          * @param rows The row numbers to select.
          * @throws IOException If the command cannot be sent.
          */
-        public void selectDATA(int[] rows) throws IOException {
+        public void SelectDATA(int[] rows) {
             //Preconditions
-            if(rows == null || rows.Length == 0)
-            {
-        throw new IllegalArgumentException("rows must be a non-null, non-empty array.");
-    }
+            if (rows == null || rows.Length == 0) {
+                throw new ArgumentException("rows must be a non-null, non-empty array.");
+            }
 
-    //Convert data to bytes
-    ByteBuffer bb = ByteBuffer.allocate(4 * rows.Length);
-    bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(int i = 0; i < rows.Length; ++i)
-            {
-        bb.putInt(i * 4, rows[i]);
-    }
+            //Convert data to bytes
+            byte[] buffer = new byte[4 * rows.Length];
+            Buffer.BlockCopy(rows, 0, buffer, 0, buffer.Length);
 
-    //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("DSEL".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
+            //Build and send message
+            XPCConnector.Instance.Send(PackValues("DSEL", 0xFF, buffer));
         }
 
         /**
@@ -534,46 +483,37 @@ os.write("DSEL".getBytes(StandardCharsets.UTF_8));
          * @param msg The message to display. Should not contain any newline characters.
          * @throws IOException If the command cannot be sent.
          */
-        public void sendTEXT(String msg) throws IOException {
-    sendTEXT(msg, -1, -1);
-}
+        public void SendTEXT(string msg) {
+            SendTEXT(msg, -1, -1);
+        }
 
-/**
- * Sets a message to be displayed on the screen in X-Plane at the specified coordinates.
- *
- * @param msg The message to display. Should not contain any newline characters.
- * @param x   The number of pixels from the right edge of the screen to display the text.
- * @param y   The number of pixels from the bottom edge of the screen to display the text.
- * @throws IOException If the command cannot be sent.
- */
-public void sendTEXT(String msg, int x, int y) throws IOException {
+        /**
+         * Sets a message to be displayed on the screen in X-Plane at the specified coordinates.
+         *
+         * @param msg The message to display. Should not contain any newline characters.
+         * @param x   The number of pixels from the right edge of the screen to display the text.
+         * @param y   The number of pixels from the bottom edge of the screen to display the text.
+         * @throws IOException If the command cannot be sent.
+         */
+        public void SendTEXT(string msg, int x, int y) {
             //Preconditions
-            if(msg == null)
-            {
-        msg = "";
-    }
+            if (msg == null) {
+                msg = "";
+            }
 
             //Convert drefs to bytes.
-            byte[]
-    msgBytes = msg.getBytes(StandardCharsets.UTF_8);
-            if(msgBytes.Length > 255)
-            {
-        throw new IllegalArgumentException("msg must be less than 255 bytes in UTF-8.");
-    }
+            byte[] msgBytes = Encoding.UTF8.GetBytes(msg);
 
-    ByteBuffer bb = ByteBuffer.allocate(8);
-    bb.order(ByteOrder.LITTLE_ENDIAN);
-    bb.putInt(0, x);
-    bb.putInt(4, y);
+            if (msgBytes.Length > 255) {
+                throw new ArgumentException("msg must be less than 255 bytes in UTF-8.");
+            }
 
-    //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("TEXT".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(bb.array());
-            os.write(msgBytes.Length);
-            os.write(msgBytes);
-            sendUDP(os.toByteArray());
+            List<byte> buffer = new List<byte>();
+            buffer.AddRange(BitConverter.GetBytes(x));
+            buffer.AddRange(BitConverter.GetBytes(y));
+            
+            //Build and send message
+            XPCConnector.Instance.Send(PackValues("TEXT", 0xFF, buffer.ToArray(), msgBytes.Length, msgBytes));
         }
 
         /**
@@ -582,17 +522,11 @@ os.write("TEXT".getBytes(StandardCharsets.UTF_8));
          * @param view The view to use.
          * @throws IOException If the command cannot be sent.
          */
-        public void sendVIEW(ViewType view) throws IOException {
-    ByteBuffer bb = ByteBuffer.allocate(4);
-    bb.order(ByteOrder.LITTLE_ENDIAN);
-    bb.putInt(view.getValue());
+        public void SendVIEW(ViewType view) {
+            byte[] bytes = BitConverter.GetBytes((int)view);
 
-    //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("VIEW".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
+            //Build and send message
+            XPCConnector.Instance.Send(PackValues("VIEW", 0xFF, bytes));
         }
 
         /**
@@ -604,33 +538,24 @@ os.write("VIEW".getBytes(StandardCharsets.UTF_8));
          *               interpreted as a (Lat, Lon, Alt) point.
          * @throws IOException  If the command cannot be sent.
          */
-        public void sendWYPT(WaypointOp op, float[] points) throws IOException {
+        public void SendWYPT(WaypointOp op, float[] points) {
             //Preconditions
-            if(points.Length % 3 != 0)
-            {
-        throw new IllegalArgumentException("points.Length should be divisible by 3.");
-    }
-            if(points.Length / 3 > 255)
-            {
-        throw new IllegalArgumentException("Too many points. Must be less than 256.");
-    }
+            if (points.Length % 3 != 0) {
+                throw new ArgumentException("points.Length should be divisible by 3.");
+            }
+            if (points.Length / 3 > 255) {
+                throw new ArgumentException("Too many points. Must be less than 256.");
+            }
 
-    //Convert points to bytes
-    ByteBuffer bb = ByteBuffer.allocate(4 * points.Length);
-    bb.order(ByteOrder.LITTLE_ENDIAN);
-            for(float f : points)
-            {
-        bb.putFloat(f);
-    }
+            //Convert points to bytes
+            List<byte> buffer = new List<byte>();
+            
+            for (int i = 0; i < points.Length; ++i) {
+                buffer.AddRange(BitConverter.GetBytes(points[i]));
+            }
 
-    //Build and send message
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("WYPT".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(op.getValue());
-            os.write(points.Length / 3);
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
+            //Build and send message
+            XPCConnector.Instance.Send(PackValues("WYPT", 0xFF, (int)op, points.Length / 3, buffer.ToArray()));
         }
 
         /**
@@ -639,24 +564,23 @@ os.write("WYPT".getBytes(StandardCharsets.UTF_8));
          * @param port The new incoming port number.
          * @throws IOException If the command cannot be sent.
          */
-        public void setCONN(int port) throws IOException {
-            if(port < 0 || port >= 0xFFFF)
-            {
-        throw new IllegalArgumentException("Invalid port (must be non-negative and less than 65536).");
-    }
+        public void SetCONN(int port) {
+            if (port < 0 || port >= 0xFFFF) {
+                throw new ArgumentException("Invalid port (must be non-negative and less than 65536).");
+            }
 
-    ByteArrayOutputStream os = new ByteArrayOutputStream();
-os.write("CONN".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write((byte) port);
-            os.write((byte) (port >> 8));
-            sendUDP(os.toByteArray());
-
-int soTimeout = socket.getSoTimeout();
-socket.close();
-            socket = new DatagramSocket(port);
-socket.setSoTimeout(soTimeout);
-            readUDP(); // Try to read response
+            XPCConnector.Instance.Send(PackValues("CONN", 0xFF, port, port >> 8));
+            XPCConnector.Instance.ChangePort(port);
         }
+
+        private byte[] PackValues(params object[] values) {
+            List<byte> msg = new List<byte>();
+
+            foreach (object v in values) {
+                msg.AddRange(Encoding.UTF8.GetBytes(v.ToString()));
+            }
+
+            return msg.ToArray();
         }
     }
+}

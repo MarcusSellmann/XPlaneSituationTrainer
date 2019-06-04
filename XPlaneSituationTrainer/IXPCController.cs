@@ -9,12 +9,6 @@ namespace XPlaneSituationTrainer.Lib {
         XPCServerConfig ServerConfig { get; }
 
         /// <summary>
-        /// Gets the UDP client.
-        /// </summary>
-        /// <value>The UDP client pointing at the XPC server.</value>
-        XPCConnector UdpClient { get; }
-
-        /// <summary>
         /// Saves the server configuration to an xml file.
         /// </summary>
         void SaveServerConfigToXml();
@@ -28,6 +22,6 @@ namespace XPlaneSituationTrainer.Lib {
         /// Connects to XPC server using the specified IP and port from the <c>ServerConfig</c>.
         /// </summary>
         /// <returns><c>true</c>, if the server has been connected successfully, <c>false</c> otherwise.</returns>
-        bool ConnectToServer();
+        void ConnectToServer();
     }
 }

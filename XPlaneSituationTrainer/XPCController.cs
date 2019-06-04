@@ -1,17 +1,31 @@
 ﻿using System.IO;
 using System.Xml.Serialization;
 
+using XPlaneSituationTrainer.Lib.Commanding;
 using XPlaneSituationTrainer.Lib.Connectivity;
 
 namespace XPlaneSituationTrainer.Lib {
     public class XPCController : IXPCController {
+        #region Attributes
+        private static IXPCController _instance;
+        private XPCDirector _director;
+        #endregion
+
+        #region Properties
+        public IXPCController Instance {
+            get {
+                if (_instance == null) {
+                    _instance = new XPCController();
+                }
+
+                return _instance;
+            }
+        }
         public XPCServerConfig ServerConfig { get; private set; }
-        public XPCConnector UdpClient { get; private set; }
+        #endregion
 
-        public bool ConnectToServer() {
-            UdpClient = XPCConnector.ConnectTo(ServerConfig.Hostname, ServerConfig.Port);
-
-            return UdpClient != null; 
+        public void ConnectToServer() {
+            XPCConnector.Instance.ConnectTo(ServerConfig.Hostname, ServerConfig.Port);
         }
 
         public void ReadServerConfigFromXml() {
@@ -27,34 +41,9 @@ namespace XPlaneSituationTrainer.Lib {
             writer.Serialize(file, ServerConfig);
             file.Close();
         }
-    }
-}
 
-
-
-
-
-class Program {
-    static void Main(string[] args) {
-        //wait for reply messages from server and send them to console 
-        Task.Factory.StartNew(async () => {
-            while (true) {
-                try {
-                    var received = await client.Receive();
-                    Console.WriteLine(received.Message);
-                    if (received.Message.Contains("quit"))
-                        break;
-                } catch (Exception ex) {
-                    Debug.Write(ex);
-                }
-            }
-        });
-
-        //type ahead :-)
-        string read;
-        do {
-            read = Console.ReadLine();
-            client.Send(read);
-        } while (read != "quit");
+        private XPCController() {
+            _director = new XPCDirector();
+        }
     }
 }
