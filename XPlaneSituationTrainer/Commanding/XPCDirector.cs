@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using XPlaneSituationTrainer.Lib.Commanding;
+
 using XPlaneSituationTrainer.Lib.Connectivity;
 
 namespace XPlaneSituationTrainer.Lib.Commanding {
@@ -95,7 +95,7 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             XPCConnector.Instance.Send(sendMsg.ToArray());
 
             //Read response
-            byte[] data = readUDP();
+            byte[] data = XPCConnector.Instance.Receive();
             if (data.Length == 0) {
                 throw new IOException("No response received.");
             }
@@ -105,15 +105,14 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             }
 
             float[][] result = new float[drefs.Length][];
-            ByteBuffer bb = ByteBuffer.wrap(data);
-            bb.order(ByteOrder.LITTLE_ENDIAN);
             int cur = 6;
 
+            // TODO: Wird so nicht funktionieren!
             for (int j = 0; j < result.Length; ++j) {
                 result[j] = new float[data[cur++]];
-                for (int k = 0; k < result[j].Length; ++k) //TODO: There must be a better way to do this
-                {
-                    result[j][k] = bb.getFloat(cur);
+                for (int k = 0; k < result[j].Length; ++k) {
+
+                    result[j][k] = data[cur];
                     cur += 4;
                 }
             }
@@ -145,14 +144,12 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             if (drefs == null || drefs.Length == 0) {
                 throw new ArgumentException(("drefs must be non-empty."));
             }
-
             if (values == null || values.Length != drefs.Length) {
                 throw new ArgumentException("values must be of the same size as drefs.");
             }
 
-            ByteArrayOutputStream os = new ByteArrayOutputStream();
-            os.write("DREF".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
+            List<byte> sendMsg = new List<byte>();
+            sendMsg.AddRange(PackValues("DREF", 0xFF));
 
             for (int i = 0; i < drefs.Length; ++i) {
                 string dref = drefs[i];
@@ -166,7 +163,7 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
                 }
 
                 //Convert drefs to bytes.
-                byte[] drefBytes = dref.getBytes(StandardCharsets.UTF_8);
+                byte[] drefBytes = Encoding.UTF8.GetBytes(dref);
                 if (drefBytes.Length == 0) {
                     throw new ArgumentException("DREF is an empty string!");
                 }
@@ -174,21 +171,14 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
                     throw new ArgumentException("dref must be less than 255 bytes in UTF-8. Are you sure this is a valid dref?");
                 }
 
-                ByteBuffer bb = ByteBuffer.allocate(4 * value.Length);
-                bb.order(ByteOrder.LITTLE_ENDIAN);
-
-                for (int j = 0; j < value.Length; ++j) {
-                    bb.putFloat(j * 4, value[j]);
-                }
-
+                byte[] buffer = new byte[4 * value.Length];
+                Buffer.BlockCopy(value, 0, buffer, 0, buffer.Length);
+                
                 //Build and send message
-                os.write(drefBytes.Length);
-                os.write(drefBytes, 0, drefBytes.Length);
-                os.write(value.Length);
-                os.write(bb.array());
+                sendMsg.AddRange(PackValues(drefBytes.Length, drefBytes, value.Length, buffer));
             }
 
-            XPCConnector.Instance.Send(os.toByteArray());
+            XPCConnector.Instance.Send(sendMsg.ToArray());
         }
 
         /// <summary>
@@ -199,12 +189,7 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
         /// <exception cref="IOException">If the command cannot be sent or a response cannot be read.</exception>
         public float[] GetCTRL(int ac) {
             // Send request
-            List<byte> sendMsg = new List<byte>();
-            sendMsg.AddRange(Encoding.UTF8.GetBytes("GETC"));
-            sendMsg.Add(0xFF); //Placeholder for message Length
-            os.write(); 
-            os.write(ac);
-            XPCConnector.Instance.Send(os.toByteArray());
+            XPCConnector.Instance.Send(PackValues("GETC", 0xFF, ac));
 
             // Read response
             byte[] data = XPCConnector.Instance.Receive();
@@ -217,15 +202,13 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
 
             // Parse response
             float[] result = new float[7];
-            ByteBuffer bb = ByteBuffer.wrap(data);
-            bb.order(ByteOrder.LITTLE_ENDIAN);
-            result[0] = bb.getFloat(5);
-            result[1] = bb.getFloat(9);
-            result[2] = bb.getFloat(13);
-            result[3] = bb.getFloat(17);
-            result[4] = bb.get(21);
-            result[5] = bb.getFloat(22);
-            result[6] = bb.getFloat(27);
+            result[0] = data[5];
+            result[1] = data[9];
+            result[2] = data[13];
+            result[3] = data[17];
+            result[4] = data[21];
+            result[5] = data[22];
+            result[6] = data[27];
             return result;
         }
 
@@ -282,33 +265,35 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             //Pad command values and convert to bytes
             int i;
             int cur = 0;
-            ByteBuffer bb = ByteBuffer.allocate(26);
-            bb.order(ByteOrder.LITTLE_ENDIAN);
+            List<byte> buffer = new List<byte>();
+
             for (i = 0; i < 6; ++i) {
                 if (i == 4) {
                     if (i >= values.Length) {
-                        bb.put(cur, (byte)-1);
+                        unchecked { buffer.Add((byte)-1); }
                     } else {
-                        bb.put(cur, (byte)values[i]);
+                        buffer.AddRange(BitConverter.GetBytes(values[i]));
                     }
                     cur += 1;
                 } else if (i >= values.Length) {
-                    bb.putFloat(cur, -998);
+                    unchecked { buffer.Add((byte)-998); }
                     cur += 4;
                 } else {
-                    bb.putFloat(cur, values[i]);
+                    buffer.AddRange(BitConverter.GetBytes(values[i]));
                     cur += 4;
                 }
             }
-            bb.put(cur++, (byte)ac);
-            bb.putFloat(cur, values.Length == 7 ? values[6] : -998);
+
+            buffer.Add((byte)ac);
+            
+            if (values.Length == 7) {
+                buffer.AddRange(BitConverter.GetBytes(values[6]));
+            } else {
+                unchecked { buffer.Add((byte)-998); }
+            }
 
             //Build and send message
-            ByteArrayOutputStream os = new ByteArrayOutputStream();
-            os.write("CTRL".getBytes(StandardCharsets.UTF_8));
-            os.write(0xFF); //Placeholder for message Length
-            os.write(bb.array());
-            sendUDP(os.toByteArray());
+            XPCConnector.Instance.Send(PackValues("CTRL", 0xFF, buffer.ToArray()));
         }
 
         /// <summary>
@@ -320,10 +305,10 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
         /// <exception cref="IOException">If the command cannot be sent or a response cannot be read.</exception>
         public double[] GetPOSI(int ac) {
             // Send request
-            XPCConnector.Instance.Send(PackValues("GETP", 0xFF, ac).ToArray());
+            XPCConnector.Instance.Send(PackValues("GETP", 0xFF, ac));
 
             // Read response
-            byte[] data = readUDP();
+            byte[] data = XPCConnector.Instance.Receive();
             if (data.Length == 0) {
                 throw new IOException("No response received.");
             }
@@ -402,20 +387,18 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             }
 
             //Pad command values and convert to bytes
-            int i;
+            List<byte> buffer = new List<byte>();
 
-            byte[] bb = new byte[28];
-
-            for (i = 0; i < values.Length; ++i) {
-                bb.putFloat(i * 4, values[i]);
+            foreach (float f in values) {
+                buffer.AddRange(BitConverter.GetBytes(f));
             }
-            for (; i < 7; ++i) {
-                bb.putFloat(i * 4, -998);
+
+            if (values.Length < 7) {
+                unchecked { buffer.Add((byte)-998); }
             }
 
             //Build and send message
-            os.write(bb.array());
-            XPCConnector.Instance.Send(PackValues("POSI", 0xFF, ac, ).ToArray());
+            XPCConnector.Instance.Send(PackValues("POSI", 0xFF, ac, buffer.ToArray()));
         }
 
         /**
@@ -425,14 +408,16 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
          * @throws IOException If the read operation fails.
          */
         public float[][] ReadData() {
-            byte[] buffer = readUDP();
-            ByteBuffer bb = ByteBuffer.wrap(buffer);
+            byte[] buffer = XPCConnector.Instance.Receive();
             int cur = 5;
-            int len = bb.get(cur++);
-            float[][] result = new float[bb.get(len)][9];
+            int len = buffer[cur++];
+            float[][] result = new float[buffer.Length][];
+
             for (int i = 0; i < len; ++i) {
+                result[i] = new float[9];
+
                 for (int j = 0; j < 9; ++j) {
-                    result[i][j] = bb.getFloat(cur);
+                    result[i][j] = buffer[cur];
                     cur += 4;
                 }
             }
@@ -452,8 +437,8 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             }
 
             //Convert data to bytes
-            ByteBuffer bb = ByteBuffer.allocate(4 * 9 * data.Length);
-            bb.order(ByteOrder.LITTLE_ENDIAN);
+            List<byte> buffer = new List<byte>();
+            
             for (int i = 0; i < data.Length; ++i) {
                 int rowStart = 9 * 4 * i;
                 float[] row = data[i];
@@ -461,15 +446,15 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
                     throw new ArgumentException("Rows must contain exactly 9 items. (Row " + i + ")");
                 }
 
-                bb.putInt(rowStart, (int)row[0]);
+                buffer.AddRange(BitConverter.GetBytes(row[0]));
+                
                 for (int j = 1; j < row.Length; ++j) {
-                    bb.putFloat(rowStart + 4 * j, row[j]);
+                    buffer.AddRange(BitConverter.GetBytes(row[j]));
                 }
             }
 
             //Build and send message
-            os.write(bb.array());
-            XPCConnector.Instance.Send(PackValues("DATA", 0xFF, ).ToArray());
+            XPCConnector.Instance.Send(PackValues("DATA", 0xFF, buffer.ToArray()));
         }
 
         /**
@@ -485,15 +470,11 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             }
 
             //Convert data to bytes
-            ByteBuffer bb = ByteBuffer.allocate(4 * rows.Length);
-            bb.order(ByteOrder.LITTLE_ENDIAN);
-            for (int i = 0; i < rows.Length; ++i) {
-                bb.putInt(i * 4, rows[i]);
-            }
+            byte[] buffer = new byte[4 * rows.Length];
+            Buffer.BlockCopy(rows, 0, buffer, 0, buffer.Length);
 
             //Build and send message
-            os.write(bb.array());
-            XPCConnector.Instance.Send(PackValues("DSEL", 0xFF, ).ToArray());
+            XPCConnector.Instance.Send(PackValues("DSEL", 0xFF, buffer));
         }
 
         /**
@@ -521,19 +502,18 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             }
 
             //Convert drefs to bytes.
-            byte[] msgBytes = msg.getBytes(StandardCharsets.UTF_8);
+            byte[] msgBytes = Encoding.UTF8.GetBytes(msg);
+
             if (msgBytes.Length > 255) {
                 throw new ArgumentException("msg must be less than 255 bytes in UTF-8.");
             }
 
-            ByteBuffer bb = ByteBuffer.allocate(8);
-            bb.order(ByteOrder.LITTLE_ENDIAN);
-            bb.putInt(0, x);
-            bb.putInt(4, y);
-
+            List<byte> buffer = new List<byte>();
+            buffer.AddRange(BitConverter.GetBytes(x));
+            buffer.AddRange(BitConverter.GetBytes(y));
+            
             //Build and send message
-            os.write(bb.array());
-            XPCConnector.Instance.Send(PackValues("TEXT", 0xFF, , msgBytes.Length, msgBytes).ToArray());
+            XPCConnector.Instance.Send(PackValues("TEXT", 0xFF, buffer.ToArray(), msgBytes.Length, msgBytes));
         }
 
         /**
@@ -543,14 +523,10 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
          * @throws IOException If the command cannot be sent.
          */
         public void SendVIEW(ViewType view) {
-            Array bytes = BitConverter.GetBytes((int)view);
-
-            if (BitConverter.IsLittleEndian) {
-                Array.Reverse(bytes);
-            }
+            byte[] bytes = BitConverter.GetBytes((int)view);
 
             //Build and send message
-            XPCConnector.Instance.Send(PackValues("VIEW", 0xFF, bytes).ToArray());
+            XPCConnector.Instance.Send(PackValues("VIEW", 0xFF, bytes));
         }
 
         /**
@@ -572,15 +548,14 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             }
 
             //Convert points to bytes
-            ByteBuffer bb = ByteBuffer.allocate(4 * points.Length);
-            bb.order(ByteOrder.LITTLE_ENDIAN);
-            for (float f : points) {
-                bb.putFloat(f);
+            List<byte> buffer = new List<byte>();
+            
+            for (int i = 0; i < points.Length; ++i) {
+                buffer.AddRange(BitConverter.GetBytes(points[i]));
             }
 
             //Build and send message
-            os.write(bb.array());
-            XPCConnector.Instance.Send(PackValues("WYPT", 0xFF, (int)op, points.Length / 3, ).ToArray);
+            XPCConnector.Instance.Send(PackValues("WYPT", 0xFF, (int)op, points.Length / 3, buffer.ToArray()));
         }
 
         /**
@@ -594,23 +569,18 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
                 throw new ArgumentException("Invalid port (must be non-negative and less than 65536).");
             }
 
-            XPCConnector.Instance.Send(PackValues("CONN", 0xFF, port, port >> 8).ToArray());
-
-            int soTimeout = socket.getSoTimeout();
-            socket.close();
-            socket = new DatagramSocket(port);
-            socket.setSoTimeout(soTimeout);
-            readUDP(); // Try to read response
+            XPCConnector.Instance.Send(PackValues("CONN", 0xFF, port, port >> 8));
+            XPCConnector.Instance.ChangePort(port);
         }
 
-        private List<byte> PackValues(params object[] values) {
+        private byte[] PackValues(params object[] values) {
             List<byte> msg = new List<byte>();
 
             foreach (object v in values) {
                 msg.AddRange(Encoding.UTF8.GetBytes(v.ToString()));
             }
 
-            return msg;
+            return msg.ToArray();
         }
     }
 }
