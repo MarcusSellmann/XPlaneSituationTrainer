@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Connectivity\" />
+    <Folder Include="Data\Interfaces\" />
+    <Folder Include="Commanding\" />
+    <Folder Include="Commanding\Conversion\" />
+  </ItemGroup>
+</Project>
