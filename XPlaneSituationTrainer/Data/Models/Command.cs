@@ -1,9 +1,11 @@
-﻿namespace XPlaneSituationTrainer.Lib.Data {
-    public class FlightModelPositionCommand : ICommand {
+﻿using XPlaneSituationTrainer.Lib.Data;
+
+namespace XPlaneSituationTrainerLib.Data.Models {
+    public class Command : ICommand {
         public string DataRef { get; private set; }
         public string Value { get; private set; }
 
-        public FlightModelPositionCommand(string dataRef, string value) {
+        public Command(string dataRef, string value) {
             DataRef = dataRef;
             Value = value;
         }

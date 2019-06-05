@@ -1,12 +1,17 @@
-﻿using XPlaneSituationTrainer.Lib.Connectivity;
+﻿using XPlaneSituationTrainer.Lib.Commanding;
+using XPlaneSituationTrainer.Lib.Connectivity;
 
 namespace XPlaneSituationTrainer.Lib {
     public interface IXPCController {
         /// <summary>
         /// Gets the server configuration.
         /// </summary>
-        /// <value>The server configuration containing IP and port of the XPC server.</value>
         XPCServerConfig ServerConfig { get; }
+
+        /// <summary>
+        /// The director which coordinates the situations created by the user.
+        /// </summary>
+        XPCDirector SituationDirector { get; }
 
         /// <summary>
         /// Saves the server configuration to an xml file.
@@ -21,7 +26,6 @@ namespace XPlaneSituationTrainer.Lib {
         /// <summary>
         /// Connects to XPC server using the specified IP and port from the <c>ServerConfig</c>.
         /// </summary>
-        /// <returns><c>true</c>, if the server has been connected successfully, <c>false</c> otherwise.</returns>
         void ConnectToServer();
     }
 }

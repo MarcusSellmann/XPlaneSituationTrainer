@@ -10,7 +10,7 @@ namespace XPlaneSituationTrainer.Lib.Commanding.Conversion {
             }
 
             List<ICommand> commandList = new List<ICommand> {
-                new FlightModelPositionCommand(Position.LOCAL_X, flightModelPosition.Latitude.ToString())
+                new FlightModelPositionSituation(Position.LOCAL_X, flightModelPosition.Latitude.ToString())
             };
 
             return commandList;

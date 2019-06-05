@@ -6,10 +6,7 @@
 
   <ItemGroup>
     <Folder Include="Connectivity\" />
-    <Folder Include="Data\" />
-    <Folder Include="Data\Commands\" />
     <Folder Include="Data\Interfaces\" />
-    <Folder Include="Data\Models\" />
     <Folder Include="Commanding\" />
     <Folder Include="Commanding\Conversion\" />
   </ItemGroup>

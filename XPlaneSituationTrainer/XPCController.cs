@@ -21,6 +21,9 @@ namespace XPlaneSituationTrainer.Lib {
                 return _instance;
             }
         }
+
+        public XPCDirector SituationDirector { get; private set; }
+
         public XPCServerConfig ServerConfig { get; private set; }
         #endregion
 
