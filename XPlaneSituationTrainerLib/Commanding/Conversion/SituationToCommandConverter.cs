@@ -4,13 +4,13 @@ using XPlaneSituationTrainer.Lib.Data;
 
 namespace XPlaneSituationTrainer.Lib.Commanding.Conversion {
     public static class SituationToCommandConverter {
-        public static List<ICommand> FlightModelPositionToCommands(FlightModelPosition flightModelPosition) {
+        public static List<ISituation> FlightModelPositionToCommands(FlightModelPosition flightModelPosition) {
             if (flightModelPosition == null) {
                 throw new System.ArgumentNullException(nameof(flightModelPosition));
             }
 
-            List<ICommand> commandList = new List<ICommand> {
-                new FlightModelPositionSituation(Position.LOCAL_X, flightModelPosition.Latitude.ToString())
+            List<ISituation> commandList = new List<ISituation> {
+                new FlightModelPositionSituation()
             };
 
             return commandList;
