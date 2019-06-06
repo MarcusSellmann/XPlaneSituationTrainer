@@ -10,4 +10,8 @@
     <Folder Include="Commanding\" />
     <Folder Include="Commanding\Conversion\" />
   </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="xcopy /y &quot;$(TargetPath)&quot; &quot;$(SolutionDir)XPlaneSituationTrainer\Libs&quot;" />
+  </Target>
 </Project>
