@@ -8,6 +8,20 @@
         mc:Ignorable="d"
         Title="MainWindow" Height="450" Width="800">
     <Grid>
-        <v:RunwayDisplayUserControl />
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition />
+            <ColumnDefinition />
+        </Grid.ColumnDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="2*" />
+            </Grid.ColumnDefinitions>
+            <ComboBox Height="25" Grid.Column="1">
+                <ComboBoxItem Content="Peter" />
+            </ComboBox>
+        </Grid>
+        <v:RunwayDisplayUserControl Grid.Column="1" />
     </Grid>
 </Window>
