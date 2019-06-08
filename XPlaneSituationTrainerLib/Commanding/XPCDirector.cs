@@ -329,51 +329,50 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             return result;
         }
 
-        /**
-         * Sets the position of the player ac.
-         *
-         * @param values   <p>An array containing position elements as follows:</p>
-         *                 <ol>
-         *                     <li>Latitude (deg)</li>
-         *                     <li>Longitude (deg)</li>
-         *                     <li>Altitude (m above MSL)</li>
-         *                     <li>Roll (deg)</li>
-         *                     <li>Pitch (deg)</li>
-         *                     <li>True Heading (deg)</li>
-         *                     <li>Gear (0=up, 1=down)</li>
-         *                 </ol>
-         *                 <p>
-         *                     If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To
-         *                     change values in the middle of the array without affecting the preceding values, set the
-         *                     preceding values to -998.
-         *                 </p>
-         * @throws IOException If the command can not be sent.
-         */
+        /// <summary>
+        /// Sets the position of the player ac.
+        /// </summary>
+        /// <param name="values">
+        ///     <p>An array containing position elements as follows:</p>
+        ///         <ol>
+        ///             <li>Latitude(deg)</li>
+        ///             <li>Longitude(deg)</li>
+        ///             <li>Altitude(m above MSL)</li>
+        ///             <li>Roll(deg)</li>
+        ///             <li>Pitch(deg)</li>
+        ///             <li>True Heading(deg)</li>
+        ///             <li>Gear(0=up, 1=down)</li>
+        ///         </ol>
+        ///         <p>
+        ///             If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To
+        ///             change values in the middle of the array without affecting the preceding values, set the
+        ///             preceding values to -998.
+        ///         </p></param>
+        /// <exception cref="IOException">If the command can not be sent.</exception>
         public void SendPOSI(float[] values) {
             SendPOSI(values, 0);
         }
 
-        /**
-         * Sets the position of the specified ac.
-         *
-         * @param values   <p>An array containing position elements as follows:</p>
-         *                 <ol>
-         *                     <li>Latitude (deg)</li>
-         *                     <li>Longitude (deg)</li>
-         *                     <li>Altitude (m above MSL)</li>
-         *                     <li>Roll (deg)</li>
-         *                     <li>Pitch (deg)</li>
-         *                     <li>True Heading (deg)</li>
-         *                     <li>Gear (0=up, 1=down)</li>
-         *                 </ol>
-         *                 <p>
-         *                     If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To
-         *                     change values in the middle of the array without affecting the preceding values, set the
-         *                     preceding values to -998.
-         *                 </p>
-         * @param ac The ac to set. 0 for the player ac.
-         * @throws IOException If the command can not be sent.
-         */
+        /// <summary>
+        /// Sets the position of the specified ac.
+        /// </summary>
+        /// <param name="values"><p>An array containing position elements as follows:</p>
+        ///                      <ol>
+        ///                         <li>Latitude(deg)</li>
+        ///                         <li>Longitude(deg)</li>
+        ///                         <li>Altitude(m above MSL)</li>
+        ///                         <li>Roll(deg)</li>
+        ///                         <li>Pitch(deg)</li>
+        ///                         <li>True Heading(deg)</li>
+        ///                         <li>Gear(0=up, 1=down)</li>
+        ///                     </ol>
+        ///                     <p>
+        ///                         If @{code ctrl} is less than 6 elements long, The missing elements will not be changed. To
+        ///                         change values in the middle of the array without affecting the preceding values, set the
+        ///                         preceding values to -998.
+        ///                     </p></param>
+        /// <param name="ac">The ac to set. 0 for the player ac.</param>
+        /// <exception cref="IOException">If the command can not be sent.</exception>
         public void SendPOSI(float[] values, int ac) {
             //Preconditions
             if (values == null) {
@@ -401,12 +400,11 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             XPCConnector.Instance.Send(PackValues("POSI", 0xFF, ac, buffer.ToArray()));
         }
 
-        /**
-         * Reads X-Plane data
-         *
-         * @return The data read.
-         * @throws IOException If the read operation fails.
-         */
+        /// <summary>
+        /// Reads X-Plane data
+        /// </summary>
+        /// <returns>The data read.</returns>
+        /// <exception cref="IOException">If the read operation fails.</exception>
         public float[][] ReadData() {
             byte[] buffer = XPCConnector.Instance.Receive();
             int cur = 5;
@@ -424,12 +422,11 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             return result;
         }
 
-        /**
-         * Sends data to X-Plane
-         *
-         * @param data The data to send.
-         * @throws IOException If the command cannot be sent.
-         */
+        /// <summary>
+        /// Sends data to X-Plane
+        /// </summary>
+        /// <param name="data">The data to send.</param>
+        /// <exception cref="IOException">If the command cannot be sent.</exception>
         public void SendDATA(float[][] data) {
             //Preconditions
             if (data == null || data.Length == 0) {
@@ -457,12 +454,11 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             XPCConnector.Instance.Send(PackValues("DATA", 0xFF, buffer.ToArray()));
         }
 
-        /**
-         * Selects what data X-Plane will export over UDP.
-         *
-         * @param rows The row numbers to select.
-         * @throws IOException If the command cannot be sent.
-         */
+        /// <summary>
+        /// Selects what data X-Plane will export over UDP.
+        /// </summary>
+        /// <param name="rows">The row numbers to select.</param>
+        /// <exception cref="IOException">If the command cannot be sent.</exception>
         public void SelectDATA(int[] rows) {
             //Preconditions
             if (rows == null || rows.Length == 0) {
@@ -477,24 +473,22 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             XPCConnector.Instance.Send(PackValues("DSEL", 0xFF, buffer));
         }
 
-        /**
-         * Sets a message to be displayed on the screen in X-Plane at the default screen location.
-         *
-         * @param msg The message to display. Should not contain any newline characters.
-         * @throws IOException If the command cannot be sent.
-         */
+        /// <summary>
+        /// Sets a message to be displayed on the screen in X-Plane at the default screen location.
+        /// </summary>
+        /// <param name="msg">The message to display. Should not contain any newline characters.</param>
+        /// <exception cref="IOException">If the command cannot be sent.</exception>
         public void SendTEXT(string msg) {
             SendTEXT(msg, -1, -1);
         }
 
-        /**
-         * Sets a message to be displayed on the screen in X-Plane at the specified coordinates.
-         *
-         * @param msg The message to display. Should not contain any newline characters.
-         * @param x   The number of pixels from the right edge of the screen to display the text.
-         * @param y   The number of pixels from the bottom edge of the screen to display the text.
-         * @throws IOException If the command cannot be sent.
-         */
+        /// <summary>
+        /// Sets a message to be displayed on the screen in X-Plane at the specified coordinates.
+        /// </summary>
+        /// <param name="msg">The message to display. Should not contain any newline characters.</param>
+        /// <param name="x">The number of pixels from the right edge of the screen to display the text.</param>
+        /// <param name="y">The number of pixels from the bottom edge of the screen to display the text.</param>
+        /// <exception cref="IOException">If the command cannot be sent.</exception>
         public void SendTEXT(string msg, int x, int y) {
             //Preconditions
             if (msg == null) {
@@ -516,12 +510,11 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             XPCConnector.Instance.Send(PackValues("TEXT", 0xFF, buffer.ToArray(), msgBytes.Length, msgBytes));
         }
 
-        /**
-         * Sets the camera view in X-Plane.
-         *
-         * @param view The view to use.
-         * @throws IOException If the command cannot be sent.
-         */
+        /// <summary>
+        /// Sets the camera view in X-Plane.
+        /// </summary>
+        /// <param name="view">The view to use.</param>
+        /// <exception cref="IOException">If the command cannot be sent.</exception>
         public void SendVIEW(ViewType view) {
             byte[] bytes = BitConverter.GetBytes((int)view);
 
@@ -529,15 +522,13 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             XPCConnector.Instance.Send(PackValues("VIEW", 0xFF, bytes));
         }
 
-        /**
-         * Adds, removes, or clears a set of waypoints. If the command is clear, the points are ignored
-         * and all points are removed.
-         *
-         * @param op     The operation to perform.
-         * @param points An array of values representing points. Each triplet in the array will be
-         *               interpreted as a (Lat, Lon, Alt) point.
-         * @throws IOException  If the command cannot be sent.
-         */
+        /// <summary>
+        /// Adds, removes, or clears a set of waypoints. If the command is clear, the points are ignored
+        /// and all points are removed.
+        /// </summary>
+        /// <param name="op">The operation to perform.</param>
+        /// <param name="points">An array of values representing points. Each triplet in the array will be interpreted as a (Lat, Lon, Alt) point.</param>
+        /// <exception cref="IOException">If the command cannot be sent.</exception>
         public void SendWYPT(WaypointOp op, float[] points) {
             //Preconditions
             if (points.Length % 3 != 0) {
@@ -558,12 +549,11 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             XPCConnector.Instance.Send(PackValues("WYPT", 0xFF, (int)op, points.Length / 3, buffer.ToArray()));
         }
 
-        /**
-         * Sets the port on which the client will receive data from X-Plane.
-         *
-         * @param port The new incoming port number.
-         * @throws IOException If the command cannot be sent.
-         */
+        /// <summary>
+        /// Sets the port on which the client will receive data from X-Plane.
+        /// </summary>
+        /// <param name="port">The new incoming port number.</param>
+        /// <exception cref="IOException">If the command cannot be sent.</exception>
         public void SetCONN(int port) {
             if (port < 0 || port >= 0xFFFF) {
                 throw new ArgumentException("Invalid port (must be non-negative and less than 65536).");
@@ -573,6 +563,11 @@ namespace XPlaneSituationTrainer.Lib.Commanding {
             XPCConnector.Instance.ChangePort(port);
         }
 
+        /// <summary>
+        /// Packs values of any kind together to a byte array.
+        /// </summary>
+        /// <returns>Byte values.</returns>
+        /// <param name="values">Values of any kind.</param>
         private byte[] PackValues(params object[] values) {
             List<byte> msg = new List<byte>();
 
