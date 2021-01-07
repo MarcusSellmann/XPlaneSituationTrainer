@@ -1,2 +1,6 @@
 .vs
 XPlaneSituationTrainer/obj
+packages/
+XPlaneSituationTrainer/bin/
+XPlaneSituationTrainerLib/bin/
+XPlaneSituationTrainerLib/obj/
